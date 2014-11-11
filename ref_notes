@@ -1,0 +1,130 @@
+thread.c
+    int64_t wake_time;                  /* Saves the wake time for the thread */
+    struct list_elem wait_list_elem;         /* saves the waiting thread in the list */
+
+timer.c
+struct list *wait_list;
+struct semaphore sema_timer;    //semaphore for timer_sleep function
+struct  thread *cur_thread; // to store the current thread
+
+bool compare_by_wake_time(const struct list_elem *a, const struct list_elem *b, UNUSED *aux); 
+
+
+
+initially tried to implement with the waiters list inside semaphore. I was facing issues of the class variable not accessible out side the function. So implemented with a better approach of having a seperate wait list inside the timer itself. 
+
+CHange Logs:
+sep 28
+tried to use the semaphore.waiters list for accessing the next tick value.
+I am getting an error in Is_Interior function (Returns true if ELEM is an interior element)
+
+alarm-simultaneous passed:
+
+for alarm_priority test
+I introduced the priority queue for the ready queue and changed the order in which priority is added to the queue. 
+
+added new function in thread.c adn thread.h:
+  bool compare_by_priority(const struct list_elem *_a, const struct list_elem *_b, void *aux UNUSED);
+
+changed the places where ready list is added:
+thread_unblock();
+thread_yield();
+
+___________
+
+Priority-fifo implemented:
+
+modified:   src/threads/thread.c
+
+_______
+Priority-change PASSED
+added in thread.c:Thread_create function
+/*if the creating thread priority is less than the priority of thread
+  in ready_list then it should yield
+  */
+  /* here the list_entry (list_max(&ready_list,compare_by_priority,NULL), struct thread, elem)
+  function returns the max priority thread from the Ready_List and that is compared to check whether
+  the current priority of the thread is less or not
+  */
+  if(!compare_by_priority(&t->elem,&(list_entry (list_max(&ready_list,compare_by_priority,NULL),
+                                        struct thread, elem))->elem, NULL))
+  {thread_yield();}
+----------------------
+Priority-sema
+added the following in synch.c
+list_insert_ordered(&sema->waiters, &thread_current ()->elem, compare_by_priority, NULL);
+instead of : 
+list_push_back (&sema->waiters, &thread_current ()->elem);
+
+thread.c thread.h
+void
+thread_yield_cur (struct thread *cur); customer yiedl function for priority sema implementation
+
+-------
+priority condvar:
+added in semaphore_elem
+    int semaphore_elem_priority;
+    /* == Implementation */
+changes: thread.c
+	thread.h
+------------------
+priority donation:
+thread.h
+added the donated_priority in thread struct module to save the state of donated priority
+int donated_priority;               /* Saves the priority donated from another thread during thread donation */
+bool compare_by_donated_priority(const struct list_elem *_a, const struct list_elem *_b, void *aux UNUSED)
+thread.c
+printf("thread get priority DONNE: %d\n",cur->donated_priority);
+
+made it to extern in thread.h file and removed static in thread.c file
+struct list ready_list;  
+
+-------
+  /*My Implementation*/
+  
+  /*=== Implementation */
+
+-------
+BSD Scheduler:
+/* Floating Point Arithmetic   17.14 fixed point representation*/
+#define P 17
+#define Q 14
+#define 2_POWER_Q 1<<(Q)
+/* 17+14 = 31 one bit for signed numbers *///Convert n to fixed point: 	n * f
+#define TO_FP(n) (n)*(F)
+//Convert x to integer (rounding to nearest): 	(x + f / 2) / f if x >= 0,
+//(x - f / 2) / f if x <= 0.
+#define TO_INT_NEAR(x) ((x)>=0 ?(x + (F)/2)/(F) :(x - (F)/2)/(F))
+//Convert x to integer (rounding toward zero): 	x / f
+#define TO_INT_ZERO(x) (x)/(F)
+//Add x and y: 	x + y
+#define ADD_FP(x,y) (x)+(y)
+//Subtract y from x: 	x - y
+#define SUB_FP(x,y) (x)-(y)
+//Add x and n: 	x + n * f
+#define ADD_FP_INT(x,n) (x)+(n)*(F)
+//Subtract n from x: 	x - n * f
+#define SUB_FP_INT(x,n) (x)-n*f
+//Multiply x by y: 	((int64_t) x) * y / f
+#define MUL_FP(x,y) ((int64_t) x) * (y)/(F)
+//Multiply x by n: 	x * n
+#define MUL_FP_INT(x,n) (x)*(n)
+//Divide x by y: 	((int64_t) x) * f / y
+#define DIV_FP(x,y) ((int64_t) (x) * (f) / (y)
+//Divide x by n: 	x / n
+#define DIV_FP_INT(x,n) (x)/(n)
+
+functions pertaining to floating point arithmentic are defined in thread.h
+
+two elements are added to strcut thread
+int nice;                           /* stores the nice value of each thread */
+int recent_cpu;
+
+void refresh_load_avg(void)  /*function to update the load average */
+int refresh_priority(struct thread* a) /* refreshing the priority of the threads */
+      
+      
+
+
+
+

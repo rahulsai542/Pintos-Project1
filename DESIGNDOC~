@@ -1,0 +1,225 @@
+                         +-----------------+
+                         |     CSE 521     |
+                         |    PROJECT 1    |
+                         | DESIGN DOCUMENT |
+                         +-----------------+
+---- GROUP ----
+
+Prakash Natarajan <pn33@buffalo.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for
+>> the TAs, or extra credit, please give them here.
+
+I have done the mlfqs implementation in the project. Due to few unknown mistakes with my implementation it is not working properly. Though the test cases are failing, can you please consider providing marks for the implementation. 
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation,
+>> course text, and lecture notes.
+
+None.
+
+Alarm Clock:
+============
+---- DATA STRUCTURES ----
+
+>> Copy here the declaration of each new or changed `struct' or `struct'
+>> member, global or static variable, `typedef', or enumeration.
+>> Identify the purpose of each in 25 words or less.
+
+Added in Struct Thread in thread.h:
+-int64_t wake_time;                  /* Saves the wake time for the thread */
+	This entity is used to store the time the thread have to be woken up from sleep after it calls the timer sleep function.
+
+Added in timer.c:
+-struct list wait_list;       //list to hold and initialise all the waiting elements
+	this list holds the waiting threads that calls the timer sleep function. Threads are added in timer sleep function and woke up in timer Interrupt.
+ 
+
+---- ALGORITHMS ----
+
+>> This is where you tell us how your code works, through questions that probe your understanding of your code:
+	Inital start time of the threads is added to the thread in when the thread calls the thread_sleep function and it is added to the wait_list list and the thread is blocked. In timer_interrupt function,it checks continuosly for the thread whose wake_time is less than the current timer_ticks. If a thread has less wake time, then it is removed from the wait_list, the thread is unblocked.
+
+---- SYNCHRONIZATION ----
+
+>> A4: How are race conditions avoided when multiple threads call
+>> timer_sleep() simultaneously?
+
+Race Conditions are avoided with interrupt enable and disabling while adding the thread to the wait_list and  blocking the thread. By this way can handle multiple timer sleep calls.
+
+>> A5: How are race conditions avoided when a timer interrupt occurs
+>> during a call to timer_sleep()?
+
+When the timer interrupt occurs, all the elements in the wait_list are checked for wake times which is less than the current timer_ticks. this way we can make sure that only one thread are woken up in the timer interrupt this avoiding race condition.
+	
+
+---- RATIONALE ----
+
+
+>> A6: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+	Initially I tried to implement the elements of wait_list by comparing with their wake time. But since different threads has different wake wake this did not work out. I also tried to implement this with seperate array of wake times and comparing the wake time with the current timer ticks. This approach needs a seperate mechanism to point to their individual threads. 
+	I tried to add semaphore implementation instead seperate wait list. However I was not able to select the particular thread based on the the thread wake time and wake that thread.
+	Adding a wake_time type to the thread struct seems to be better because this is a thread property. So keeping it inside threads provide additional accessibility whenever required. 
+
+PRIORITY SCHEDULER:
+===================
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+
+- bool compare_by_priority(const struct list_elem *_a, const struct list_elem *_b, void *aux UNUSED);
+
+I added a new function in thread.c . This function compares the priority of thread list_elem and returns true of thread _a has higher priority than thread _b. list_entry macro is used to get the thread struct type from the list elem.
+
+- bool compare_by_sema_priority(const struct list_elem *_a, const struct list_elem *_b, void *aux);
+- int semaphore_elem_priority;
+ added the semaphore_elem_priority in struct semaphore_elem.It is used in condition wait. compare_by_sema_priority is used to compare two semaphore_elem (_a ,_b). returns true if the a->sema_elem_priority is greater than b->sema_elem_priority.
+
+- void thread_yield_cur (struct thread *cur);
+	This is similar to thread_yield function except that instead of yielding the current thread it yields the thread value passed on to the function. it is defined in thread.c.customized thread yield function to yeild add the popped thread on the ready Queue with interrupts turned off;thread_yield function can not used as it resulted in error.
+
+- struct thread *front_pop; 
+ in sema_up function to store the front poped element.
+- bool isYield = false;
+  variable to check whether the thread has to be yielded or not.
+
+- int donated_priority;               
+	Saves the priority donated from another thread during thread donation;
+
+-int second_donated_priority;        
+ 	second donated priority stored inside this
+
+-bool is_donated;                    
+	check whether the thread has been donated priority or not;false by default  
+
+-bool is_second_donated;              
+	checks whether the thread is donated again second time.
+
+>> B2: Explain the data structure used to track priority donation.
+>> Use ASCII art to diagram a nested donation.  (Alternately, submit a
+>> .png file.)
+
+ 	H		M
+	p:33		p:32
+	 \		 /
+		L
+	donated_priority:32
+	is_donated: true
+	second_donated_priority:33
+	is_second_donated:true
+
+---- ALGORITHMS ----
+
+>> B3: How do you ensure that the highest priority thread waiting for
+>> a lock, semaphore, or condition variable wakes up first?
+
+	The current implementation of adding a thread to synchronisation waiting queue is by using list_push_back function which pushback the thread at the end of the list. So in that case the higher priority thread is not invoked first. So I changed my implementation of adding the elements to the list based on the priority. compare_by_priority and compare_by_sema_priority are the two functions which are invoked to determine the ordering of the list items. SO everytime the first element in the list would be higher order. The current thread accessing the synchronisation primitive is checked with the front thread in the waiting queue of the list. If the current thread has lower priority than the front thread of the list, it is yielded immediately. By this way we can make sure that the highest priority waiting thread is woken up first.
+
+>> B4: Describe the sequence of events when a call to lock_acquire()
+>> causes a priority donation.  How is nested donation handled?
+	The first thread which calls the lock acquire gets hold on the lock and it is stored in lock->holder variable. Every thread's donated priority and second donated priority are initialised to the thread's priority at the time of creation itself(handled in inti_thread function).  When a higher priority thread(say M) calls the lock acquire, it first checks lock->holder donated priority is less than the M's priority. If so it sets the lock->holder's donated_priority to M's priority and also lock->holder's is_donated to true. When the second thread access lock acquire(say H) with a priority higher than both M and lock->holder's priority,then lock_acquire function checks whether the lock->holder has already donated or not and the H's priroity is higher that lock->holer's priority, if so then it sets the lock->holder's second_donated_priority to H's priority and also lock->holder's is_second_donated to true.
+
+>> B5: Describe the sequence of events when lock_release() is called
+>> on a lock that a higher-priority thread is waiting for.
+	When the lock_release function is called, first it checks whether the there are any waites for the lock->semaphore. then it checks whether it is is_second_donated, if so then lock->holder second_donated_priority is set to its donated priority. By this way we make sure that it lowers its priority priority to second priority. (this condition is made sure because the implementation is such a way that only after setting the is_donated, is_second_donated can be checked.). When the medium prioirty thread access the lock acquire then lock->holder is_donated is already set to true, so it sets the donated priority to its original priority.
+thread_get_priority function is handled such a way to support this implementation.
+
+
+---- SYNCHRONIZATION ----
+
+>> B6: Describe a potential race in thread_set_priority() and explain
+>> how your implementation avoids it.  Can you use a lock to avoid
+>> this race?
+	When a thread access the function thread_set_priority to set its priority to a new value, if first checks whether the new_priority is less than the priority of first thread. If so it yields. By this way, we make sure that the highest priority thread runs everytime we change the priority. 
+
+---- RATIONALE ----
+
+>> B7: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+	Initially I tried to recurse through all the list elements in order to get the maximum prioirty in the list. however everytime for everythread the while loop is executed, so it is of order O(N) to get the maximum priority element in the list.By this implementation, getting the maximum priority element from the list is of order O(1). 
+	Initially while implementing donation, I tried to define compare_by_donated_priority similar to compare_by_priority method. This does not work when with two different resources. This implemetation handles the case of donation of two resources.
+
+			  ADVANCED SCHEDULER
+			  ==================
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---struct thread ----
+-int nice;                           
+	stores the nice value of each thread 
+-int recent_cpu;                    
+	stores the CPU time of each thread.
+---
+int load_avg;	
+	Used to store the system load_avg.
+- extern struct list ready_list;
+- extern struct list all_list;
+	Changed the implementation to extern because it has to be used in the timer.c to refresh the priorities adn the recent CPU of all the threads in the lists
+
+-void refresh_load_avg(void)   ;  
+	function to update the load average 
+-int refresh_priority(struct thread* a);
+	 refreshing the priority of the thread 'a' to a new value and returns it.
+-int refresh_priority_cur(void); 
+	 refreshing the priority of the current thread and returns it.
+-int refresh_recent_cpu(struct thread* t);  
+	 Refeshes the recent CPU of thread t and returns it.
+
+---- ALGORITHMS ----
+
+>> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
+>> has a recent_cpu value of 0.  Fill in the table below showing the
+>> scheduling decision and the priority and recent_cpu values for each
+>> thread after each given number of timer ticks:
+
+timer  recent_cpu    priority   thread
+ticks   A   B   C   A   B   C   to run
+-----  --  --  --  --  --  --   ------
+ 0	0   0   0  63  61  59   A
+ 4	4   0   0  62  61  59	A
+ 8	8   0   0  61  61  59   B
+12	8   4   0  61  60  59   A
+16     12   4   0  60  60  59   B
+20     12   8   0  60  59  59   A
+24     16   8   0  59  59  59   C
+28     16   8   4  59  59  58   B
+32     16  12   4  59  58  58   A
+36     20  12   4  58  58  58   C
+
+(manually calculated)
+>> C3: Did any ambiguities in the scheduler specification make values
+>> in the table uncertain?  If so, what rule did you use to resolve
+>> them?  Does this match the behavior of your scheduler?
+	I just assumed that timer interrupt occured right after thread A . By this way the recent CPU of A gets increased and priority of this thread is recalculated. Then the process goes on to all threads.
+
+>> C4: How is the way you divided the cost of scheduling between code
+>> inside and outside interrupt context likely to affect performance?
+
+---- RATIONALE ----
+
+>> C5: Briefly critique your design, pointing out advantages and
+>> disadvantages in your design choices.  If you were to have extra
+>> time to work on this part of the project, how might you choose to
+>> refine or improve your design?
+
+	I read line by line in the document and coded the functions then and there. However I did make small mistake somewhere, which makes my mlfqs-load-60 to start to zero. If i had given extra time i would have defined an abtraction layer for all the operations that i implemented with this method. I would have also changed the implementation of the  refresh_recent_cpu,refresh_priority function to a better way.
+
+>> C6: The assignment explains arithmetic for fixed-point math in
+>> detail, but it leaves it open to you to implement it.  Why did you
+>> decide to implement it the way you did?  If you created an
+>> abstraction layer for fixed-point math, that is, an abstract data
+>> type and/or a set of functions or macros to manipulate fixed-point
+>> numbers, why did you do so?  If not, why not?
+
+	Initally i thought of using the fixed point math as it is given by the doc. Like to convert a number a number into floating point i just multiply it by 2^14. Latter i realised that it may lead to many errors when we manually perform every operation then and there. So i declared all the operation in macro as given in the document. It saves lot of space which is a must for kernel level programming.

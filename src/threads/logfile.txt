@@ -1,0 +1,4 @@
+cd build && make all
+make[1]: Entering directory `/home/pintos/pintos/src/threads/build'
+gcc -m32 -c ../../devices/timer.c -o devices/timer.o -g -msoft-float -O -fno-stack-protector -nostdinc -I../.. -I../../lib -I../../lib/kernel -Wall -W -Wstrict-prototypes -Wmissing-prototypes -Wsystem-headers  -MMD -MF devices/timer.d
+make[1]: Leaving directory `/home/pintos/pintos/src/threads/build'
